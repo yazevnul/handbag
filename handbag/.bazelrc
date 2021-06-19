@@ -1,0 +1,7 @@
+build --cxxopt=-std=c++2a
+build --cxxopt=-stdlib=libc++
+build --cxxopt=-Wall
+build --cxxopt=-Wextra
+build --cxxopt=-pedantic
+build --cxxopt=-Wno-gnu-zero-variadic-macro-arguments
+build --cxxopt=-Wno-gcc-compat
