@@ -1,0 +1,15 @@
+dist: xenial
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - pkg-config
+      - wget
+
+before_install:
+  - ./ci/linux/before_install.sh
+
+script:
+  - ./ci/linux/test.sh
