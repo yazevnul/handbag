@@ -1,0 +1,21 @@
+#pragma once
+
+#include <cstddef>
+#include <string>
+
+#include "absl/status/statusor.h"
+#include "absl/status/status.h"
+
+namespace handbag::io {
+struct IInputStream {
+virtual ~IInputStream();
+
+virtual absl::StatusOr<size_t> read(void* dst, size_t dst_capacity) noexcept = 0;
+
+virtual absl::Status close() noexcept = 0;
+};
+
+absl::Status readAll(IInputStream& input, std::string& dst) noexcept;
+absl::StatusOr<std::string> readAll(IInputStream& input) noexcept;
+
+}
