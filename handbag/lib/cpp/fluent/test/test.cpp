@@ -1,46 +1,47 @@
-#include "gtest/gtest.h"
-
 #include "lib/cpp/fluent/fluent.h"
+
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 #include <string>
 #include <memory>
 
+using namespace ::testing;
+
 namespace {
-    struct Foo {
-        HANDBAG_FLUENT_MEMBER(int, number, 7)
-        HANDBAG_FLUENT_MEMBER(std::string, str)
-        HANDBAG_FLUENT_MEMBER(std::string, str_with_default, "default")
-    };
-}
+struct Foo {
+    HANDBAG_FLUENT_MEMBER(int, number, 7)
+    HANDBAG_FLUENT_MEMBER(std::string, str)
+    HANDBAG_FLUENT_MEMBER(std::string, str_with_default, "default")
+};
 
 TEST(FluentTest, Ctor) {
     const Foo foo;
-    EXPECT_EQ(7, foo.number());
-    EXPECT_EQ("", foo.str());
-    EXPECT_EQ("default", foo.str_with_default());
+    EXPECT_THAT(foo, Property(&Foo::number, Eq(7)));
+    EXPECT_THAT(foo, Property(&Foo::str, IsEmpty()));
+    EXPECT_THAT(foo, Property(&Foo::str_with_default, Eq("default")));
 }
 
-namespace {
-    struct Bar {
-        HANDBAG_FLUENT_MEMBER(int, one, 1)
-        HANDBAG_FLUENT_MEMBER(int, two, 2)
-        HANDBAG_FLUENT_MEMBER(std::unique_ptr<int>, move_only)
-    };
-}
+struct Bar {
+    HANDBAG_FLUENT_MEMBER(int, one, 1)
+    HANDBAG_FLUENT_MEMBER(int, two, 2)
+    HANDBAG_FLUENT_MEMBER(std::unique_ptr<int>, move_only)
+};
 
 TEST(FluentTest, MoveOnly) {
     {
         const Bar bar;
-        EXPECT_EQ(nullptr, bar.move_only());
+        EXPECT_THAT(bar, Property(&Bar::move_only, IsNull()));
     }
+
     {
         const auto bar = Bar()
             .set_move_only(std::make_unique<int>(3))
             .set_one(11)
             .set_two(22);
-        EXPECT_EQ(11, bar.one());
-        EXPECT_EQ(22, bar.two());
-        EXPECT_EQ(3, *bar.move_only());
+        EXPECT_THAT(bar, Property(&Bar::one, Eq(11)));
+        EXPECT_THAT(bar, Property(&Bar::two, Eq(22)));
+        EXPECT_THAT(bar, Property(&Bar::move_only, Pointee(Eq(3))));
     }
 }
 
@@ -50,8 +51,8 @@ TEST(FluentTest, Ptrs) {
         .set_str("str")
         .set_str_with_default("not_default");
 
-    EXPECT_NE(nullptr, foo.ptr_number());
-    EXPECT_NE(nullptr, foo.mut_number());
+    EXPECT_THAT(foo, Property(&Foo::ptr_number, NotNull()));
+    EXPECT_THAT(foo.mut_number(), NotNull());
 }
 
 TEST(FluentTest, Move) {
@@ -61,6 +62,6 @@ TEST(FluentTest, Move) {
         .set_str_with_default("not_default");
 
     const auto sink = std::move(foo.move_str());
-    EXPECT_EQ("str", sink);
-    EXPECT_EQ("", foo.str());
+    EXPECT_EQ(sink, "str");
+}
 }
