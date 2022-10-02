@@ -8,34 +8,45 @@
 namespace handbag::io {
 template <typename T>
 class OwningInMemoryInputStream final : public internal::InMemoryInputStream<T> {
+using Base = internal::InMemoryInputStream<T>;
 public:
     explicit OwningInMemoryInputStream(T data)
-        : internal::InMemoryInputStream<T>(std::move(data)) {}
+        : Base(std::move(data)) {}
+
     OwningInMemoryInputStream(const OwningInMemoryInputStream&) = delete;
     OwningInMemoryInputStream& operator=(const OwningInMemoryInputStream&) = delete;
-    OwnningInMemoryInputStream(OwningInMemoryInputStream&&) = default;
+    OwningInMemoryInputStream(OwningInMemoryInputStream&&) = default;
     OwningInMemoryInputStream& operator=(OwningInMemoryInputStream&&) = delete;
 
-    using internal::InMemoryInputStream<T>::read;
-    using internal::InMemoryInputStream<T>::close;
+    using Base::read;
+    using Base::close;
 };
 
 class NonOwningInMemoryInputStream final : public internal::InMemoryInputStream<std::string_view> {
+using Base = internal::InMemoryInputStream<std::string_view>;
 public:
     explicit NonOwningInMemoryInputStream(const std::string_view data) noexcept
-        : internal::InMemoryInputStream<std::string_view>(data) {}
+        : Base(data) {}
 
     NonOwningInMemoryInputStream(const void* data, const size_t size) noexcept
-        : NonOwningInMemoryInputStream({reinterpret_cast<const char*>(data), size}) {}
+        : NonOwningInMemoryInputStream(std::string_view(reinterpret_cast<const char*>(data), size)) {}
 
     NonOwningInMemoryInputStream(const NonOwningInMemoryInputStream&) = delete;
     NonOwningInMemoryInputStream& operator=(const NonOwningInMemoryInputStream&) = delete;
-    NonOwnningInMemoryInputStream(NonOwningInMemoryInputStream&&) = default;
+    NonOwningInMemoryInputStream(NonOwningInMemoryInputStream&&) = default;
     NonOwningInMemoryInputStream& operator=(NonOwningInMemoryInputStream&&) = delete;
 
 
-    using internal::InMemoryInputStream<T>::read;
-    using internal::InMemoryInputStream<T>::close;
+    using Base::read;
+    using Base::close;
 };
+
+inline NonOwningInMemoryInputStream makeNonOwningInMemoryInputStream(const std::string_view data) {
+    return NonOwningInMemoryInputStream(data);
+}
+
+inline NonOwningInMemoryInputStream makeNonOwningInMemoryInputStream(const void* data, const size_t size) {
+    return {data, size};
+}
 
 }

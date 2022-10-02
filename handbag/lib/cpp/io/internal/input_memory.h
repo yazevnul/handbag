@@ -4,7 +4,7 @@
 #include <limits>
 #include <type_traits>
 
-#include "absl/baze/optimization.h"
+#include "absl/base/optimization.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 
@@ -24,7 +24,7 @@ InMemoryInputStream& operator=(InMemoryInputStream&&) = default;
 absl::StatusOr<size_t> read(void* const dst, const size_t dst_capacity) noexcept override {
     const size_t data_size = data_.size();
     if (ABSL_PREDICT_FALSE(isClosed())) {
-        return absl::FailedPrecodition("Closed");
+        return absl::FailedPreconditionError("Closed");
     } else if (ABSL_PREDICT_FALSE(cursor_ >= data_size)) {
         return absl::ResourceExhaustedError("EOF");
     }
@@ -39,7 +39,7 @@ absl::StatusOr<size_t> read(void* const dst, const size_t dst_capacity) noexcept
 
 absl::Status close() noexcept override {
     if (ABSL_PREDICT_FALSE(isClosed())) {
-        return absl::FailedPrecondition("Already closed.");
+        return absl::FailedPreconditionError("Already closed.");
     }
 
     // no-op

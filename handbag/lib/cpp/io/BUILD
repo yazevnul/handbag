@@ -28,3 +28,12 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
     ]
 )
+
+cc_test(
+    name = "input_memory_test",
+    srcs = ["input_memory_test.cpp"],
+    deps = [
+        ":input_memory",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

@@ -8,18 +8,18 @@
 #include "absl/status/status.h"
 
 namespace handbag::io {
-absl::Status readAll(IInputSteam& input, std::string& dst) noexcept {
+absl::Status readAll(IInputStream& input, std::string& dst) noexcept {
     std::vector<std::byte> buffer;
     // Page size seem to be a good default.
-    buffer.reserve(4ULL * 1024ULL);
+    buffer.resize(4ULL * 1024ULL);
 
     const auto dst_initial_size = dst.size();
     do {
         auto result = input.read(buffer.data(), buffer.size());
         if (result.ok()) {
             dst.append(reinterpret_cast<const char*>(buffer.data()), result.value());
-        } else if (absl::IsResourceExhausted(result)) {
-            return OkStatus();
+        } else if (absl::IsResourceExhausted(result.status())) {
+            return absl::OkStatus();
         } else {
             dst.resize(dst_initial_size);
             return std::move(result).status();
@@ -31,11 +31,11 @@ absl::Status readAll(IInputSteam& input, std::string& dst) noexcept {
 
 absl::StatusOr<std::string> readAll(IInputStream& input) noexcept {
     std::string buffer;
-    auto result = readAll(input, buffer);
-    if (result.ok()) {
+    auto status = readAll(input, buffer);
+    if (status.ok()) {
         return buffer;
     }
 
-    return std::move(result).status();
+    return status;
 }
 }

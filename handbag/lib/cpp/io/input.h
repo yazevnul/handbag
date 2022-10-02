@@ -6,9 +6,11 @@
 #include "absl/status/statusor.h"
 #include "absl/status/status.h"
 
+#include "lib/cpp/io/fwd.h"
+
 namespace handbag::io {
 struct IInputStream {
-virtual ~IInputStream();
+virtual ~IInputStream() = default;
 
 virtual absl::StatusOr<size_t> read(void* dst, size_t dst_capacity) noexcept = 0;
 
