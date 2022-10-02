@@ -8,3 +8,12 @@ cc_library(
         "//lib/cpp/fluent/internal",
     ]
 )
+
+cc_test(
+    name = "fluent_test",
+    srcs = ["fluent_test.cpp"],
+    deps = [
+        "//lib/cpp/fluent",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
