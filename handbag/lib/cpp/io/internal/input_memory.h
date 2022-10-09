@@ -10,8 +10,39 @@
 #include "lib/cpp/io/input.h"
 
 namespace handbag::io::internal {
+template <typename T, typename = void>
+struct has_method_data {
+  static constexpr bool value = false;
+};
+
+template <typename T>
+struct has_method_data<T, std::void_t<decltype(std::data(std::declval<T>()))>> {
+  static constexpr bool value = true;
+};
+
+template <typename T>
+constexpr bool has_method_data_v = has_method_data<T>::value;
+
+template <typename T, typename = void>
+struct has_method_size {
+  static constexpr bool value = false;
+};
+
+template <typename T>
+struct has_method_size<T, std::void_t<decltype(std::size(std::declval<T>()))>> {
+  static constexpr bool value = true;
+};
+
+template <typename T>
+constexpr bool has_method_size_v = has_method_size<T>::value;
+
 template <typename T>
 class InMemoryInputStream : public IInputStream {
+  static_assert(has_method_data_v<T>);
+  static_assert(has_method_size_v<T>);
+  static_assert(sizeof(decltype(*std::data(std::declval<T>()))) ==
+                sizeof(std::byte));
+
  public:
   explicit InMemoryInputStream(T data) noexcept(
       std::is_nothrow_move_constructible_v<T>)
@@ -23,7 +54,7 @@ class InMemoryInputStream : public IInputStream {
 
   absl::StatusOr<size_t> read(void* const dst,
                               const size_t dst_capacity) noexcept override {
-    const size_t data_size = data_.size();
+    const size_t data_size = std::size(data_);
     if (ABSL_PREDICT_FALSE(isClosed())) {
       return absl::FailedPreconditionError("Closed");
     } else if (ABSL_PREDICT_FALSE(cursor_ >= data_size)) {
@@ -33,7 +64,7 @@ class InMemoryInputStream : public IInputStream {
     const auto bytes_available = data_size - cursor_;
     const auto bytes_to_read =
         bytes_available < dst_capacity ? bytes_available : dst_capacity;
-    std::memmove(dst, data_.data() + cursor_, bytes_to_read);
+    std::memmove(dst, std::data(data_) + cursor_, bytes_to_read);
     cursor_ += bytes_to_read;
 
     return bytes_to_read;

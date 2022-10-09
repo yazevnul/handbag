@@ -54,7 +54,13 @@ inline NonOwningInMemoryInputStream makeNonOwningInMemoryInputStream(
 
 inline NonOwningInMemoryInputStream makeNonOwningInMemoryInputStream(
     const void* data, const size_t size) {
-  return {data, size};
+  const std::string_view view(reinterpret_cast<const char*>(data), size);
+  return makeNonOwningInMemoryInputStream(view);
+}
+
+template <typename T>
+inline OwningInMemoryInputStream<T> makeOwningInMemoryInputStream(T data) {
+  return OwningInMemoryInputStream<T>(std::move(data));
 }
 
 }  // namespace handbag::io
