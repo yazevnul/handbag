@@ -1,5 +1,6 @@
 #include "lib/cpp/singleton/internal/singleton.h"
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -103,8 +104,8 @@ constexpr int kDestroying = 3;
 constexpr int kDestroyed = 3;
 
 static std::atomic<int> vault_state = kUninitialized;
-alignas(
-    alignof(SingletonVault)) static std::byte storage[sizeof(SingletonVault)];
+alignas(alignof(SingletonVault)) static std::array<
+    std::byte, sizeof(SingletonVault)> vault_memory = {};
 
 void DestroySingletonVault() {
   if (auto state = kInitialized; ABSL_PREDICT_FALSE(
@@ -132,7 +133,7 @@ void DestroySingletonVault() {
     vault_state.store(kDestroyed, std::memory_order_release);
   };
 
-  auto* const vault = reinterpret_cast<SingletonVault*>(storage);
+  auto* const vault = reinterpret_cast<SingletonVault*>(vault_memory.data());
   vault->DestroyInstances();
   std::destroy_at(vault);
 }
@@ -140,7 +141,7 @@ void DestroySingletonVault() {
 ABSL_ATTRIBUTE_RETURNS_NONNULL SingletonVault* GetSingletonVault() noexcept {
   if (const auto state = vault_state.load(std::memory_order_acquire);
       state == kInitialized) {
-    return reinterpret_cast<SingletonVault*>(storage);
+    return reinterpret_cast<SingletonVault*>(vault_memory.data());
   } else if (ABSL_PREDICT_FALSE(state == kDestroying || state == kDestroyed)) {
     if (state == kDestroying) {
       std::fprintf(stderr,
@@ -161,7 +162,7 @@ ABSL_ATTRIBUTE_RETURNS_NONNULL SingletonVault* GetSingletonVault() noexcept {
       if (state == kInitializing) {
         std::this_thread::yield();
       } else if (state == kInitialized) {
-        return reinterpret_cast<SingletonVault*>(storage);
+        return reinterpret_cast<SingletonVault*>(vault_memory.data());
       } else if (ABSL_PREDICT_FALSE(state == kUninitialized ||
                                     state == kDestroying ||
                                     state == kDestroyed)) {
@@ -183,7 +184,7 @@ ABSL_ATTRIBUTE_RETURNS_NONNULL SingletonVault* GetSingletonVault() noexcept {
     }
   }
 
-  auto* const res = ::new (storage) SingletonVault();
+  auto* const res = ::new (vault_memory.data()) SingletonVault();
   std::atexit(&DestroySingletonVault);
   vault_state.store(kInitialized);
 

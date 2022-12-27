@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cinttypes>
 #include <cstddef>
 #include <cstdio>
@@ -28,7 +29,7 @@ template <typename T, typename Tag>
 class StaticMemory {
  public:
   ABSL_ATTRIBUTE_RETURNS_NONNULL void* get() const noexcept {
-    void* const res = kStorage;
+    void* const res = memory.data();
     return res;
   }
 
@@ -36,24 +37,28 @@ class StaticMemory {
   void destroy() noexcept {}
 
  private:
-  alignas(alignof(T)) static std::byte kStorage[sizeof(T)];
+  alignas(alignof(T)) static std::array<std::byte, sizeof(T)> memory;
 };
 
 template <typename T, typename Tag>
+alignas(alignof(T))
+    std::array<std::byte, sizeof(T)> StaticMemory<T, Tag>::memory = {};
+
+template <typename T, typename Tag>
 class DynamicMemory {
-  struct Storage {
-    alignas(alignof(T)) std::byte storage[sizeof(T)];
+  struct Wrapper {
+    alignas(alignof(T)) std::array<std::byte, sizeof(T)> memory = {};
   };
 
  public:
   ABSL_ATTRIBUTE_RETURNS_NONNULL void* get() const noexcept {
-    void* const res = storage_->storage;
+    void* const res = wrapper_->memory.data();
     return res;
   }
 
   void init() noexcept {
-    storage_ = ::new (std::nothrow) Storage();
-    if (storage_ == nullptr) {
+    wrapper_ = ::new (std::nothrow) Wrapper();
+    if (wrapper_ == nullptr) {
       std::fprintf(
           stderr,
           "FATAL: Couldn't allocate memory for the singleton instance state\n");
@@ -61,10 +66,10 @@ class DynamicMemory {
     }
   }
 
-  void destroy() noexcept { ::delete storage_; }
+  void destroy() noexcept { ::delete wrapper_; }
 
  private:
-  Storage* storage_ = nullptr;
+  Wrapper* wrapper_ = nullptr;
 };
 
 constexpr bool IsSingletonDynamicallyAllocated(const size_t size) noexcept {
@@ -85,27 +90,30 @@ ABSL_ATTRIBUTE_RETURNS_NONNULL void* CreateInstance(
 template <typename T, typename Tag, int Priority,
           template <typename...> typename Traits>
 class Singleton final {
+  static constexpr bool kIsNothrowConstructible =
+      noexcept(Traits<T, Tag>::Construct(std::declval<void*>()));
+
  public:
   static ABSL_ATTRIBUTE_RETURNS_NONNULL T* getInstance() noexcept(
-      std::is_nothrow_invocable_v<typename Traits<T, Tag>::Construct>) {
-    static T* const instance = singleton_internal::CreateInstance<
-        std::is_nothrow_invocable_v<typename Traits<T, Tag>::Construct>>(
-        &CreateInstance, singleton_internal::Tag<T, Tag>::key(), Priority);
+      kIsNothrowConstructible) {
+    static T* const instance = reinterpret_cast<T*>(
+        singleton_internal::CreateInstance<kIsNothrowConstructible>(
+            &CreateInstance, singleton_internal::Tag<T, Tag>::key(), Priority));
     return instance;
   }
 
  private:
   struct State {
     void (*destroy)(void*) = &DestroyInstance;
-    singleton_internal::Memory<
-        T, singleton_internal::Tag<Tag, std::integral_constant<int, Priority>>>
+    Memory<T,
+           singleton_internal::Tag<Tag, std::integral_constant<int, Priority>>>
         storage;
   };
 
   static_assert(std::is_standard_layout_v<State>);
 
   static std::pair<void*, void*> CreateInstance() noexcept(
-      std::is_nothrow_invocable_v<typename Traits<T, Tag>::Construct>) {
+      kIsNothrowConstructible) {
     static State state;
 
     state.storage.init();
@@ -122,13 +130,13 @@ class Singleton final {
   }
 
   static void DestroyInstance(void* const state) noexcept(
-      std::is_nothrow_invocable_v<typename Traits<T, Tag>::Destroy, void*>)
-      ABSL_ATTRIBUTE_NONNULL(1) {
+      std::is_nothrow_destructible_v<T>) ABSL_ATTRIBUTE_NONNULL(1) {
     auto* const typed = reinterpret_cast<State*>(state);
 
     const absl::Cleanup destroy_storage = [&] { typed->storage.destroy(); };
 
-    Traits<T, Tag>::Destroy(typed->storage.get());
+    auto* const instance = reinterpret_cast<T*>(typed->storage.get());
+    std::destroy_at(instance);
   }
 };
 
