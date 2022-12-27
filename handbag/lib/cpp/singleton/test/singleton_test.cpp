@@ -3,13 +3,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-
 using namespace ::testing;
 
 namespace handbag::tests {
 namespace {
-TEST(Singleton, Test) {
-}
+TEST(Singleton, Test) {}
 }  // namespace
-}  // namespace handbag::io::tests
-
+}  // namespace handbag::tests
