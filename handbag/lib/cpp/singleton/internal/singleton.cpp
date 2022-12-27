@@ -20,6 +20,14 @@
 namespace handbag::singleton_internal {
 namespace {
 
+constexpr int kUninitialized = 0;
+constexpr int kInitializing = 1;
+constexpr int kInitialized = 2;
+constexpr int kDestroying = 3;
+constexpr int kDestroyed = 3;
+
+static std::atomic<int> vault_state = kUninitialized;
+
 struct SingletonStatePrefix {
   void (*destroy)(void*) = nullptr;
 };
@@ -97,13 +105,6 @@ class SingletonVault {
   std::map<int, std::vector<Entry*>> ordered_;
 };
 
-constexpr int kUninitialized = 0;
-constexpr int kInitializing = 1;
-constexpr int kInitialized = 2;
-constexpr int kDestroying = 3;
-constexpr int kDestroyed = 3;
-
-static std::atomic<int> vault_state = kUninitialized;
 alignas(alignof(SingletonVault)) static std::array<
     std::byte, sizeof(SingletonVault)> vault_memory = {};
 

@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <future>
 #include <string_view>
 
 using namespace ::testing;
@@ -79,6 +80,24 @@ TEST(Singleton, CtorCalls) {
   (void)Singleton<CountsCtorCalls>();
   EXPECT_THAT(CountsCtorCalls::ctor_calls.load(std::memory_order_acquire),
               Eq(1));
+}
+
+struct ToBeAllocatedOnHeap {
+  static constexpr size_t kSize = 10ULL * 1024 * 1024;
+
+  std::array<std::byte, kSize> data;
+};
+
+TEST(Singleton, OnHeap) { (void)Singleton<ToBeAllocatedOnHeap>(); }
+
+TEST(Singleton, Concurrency) {
+  struct A {};
+  const auto task = [] { (void)Singleton<A>(); };
+  auto job_one = std::async(std::launch::async, task);
+  auto job_two = std::async(std::launch::async, task);
+
+  job_one.get();
+  job_two.get();
 }
 
 }  // namespace
