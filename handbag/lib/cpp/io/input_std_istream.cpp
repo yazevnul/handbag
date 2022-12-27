@@ -4,10 +4,10 @@
 
 namespace handbag::io {
 class NonOwningIstream {
-public:
-   explicit NonOwningIstream(std::istream& wrappee)
-       : wrappee_(&wrappee) {}
-private:
-    std::istream* wrappee_ = nullptr;
+ public:
+  explicit NonOwningIstream(std::istream& wrappee) : wrappee_(&wrappee) {}
+
+ private:
+  std::istream* wrappee_ = nullptr;
 };
-}
+}  // namespace handbag::io

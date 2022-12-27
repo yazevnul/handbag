@@ -51,7 +51,8 @@ class InMemoryInputStream : public IInputStream {
   InMemoryInputStream& operator=(const InMemoryInputStream&) = delete;
   InMemoryInputStream(InMemoryInputStream&&) = default;
   InMemoryInputStream& operator=(InMemoryInputStream&&) = default;
-  ~InMemoryInputStream() override { /* CHECK(isClosed()); */ }
+  ~InMemoryInputStream() override { /* CHECK(isClosed()); */
+  }
 
   absl::StatusOr<size_t> read(void* const dst,
                               const size_t dst_capacity) noexcept final {
