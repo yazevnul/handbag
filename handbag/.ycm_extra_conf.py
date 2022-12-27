@@ -12,6 +12,7 @@ flags = [
     '-I', '/'.join([REPO_DIR, 'bazel-handbag', 'external', 'com_google_absl', ]),
     '-I', '/'.join([REPO_DIR, 'bazel-handbag', 'external', 'com_google_googletest', 'googlemock', 'include', ]),
     '-I', '/'.join([REPO_DIR, 'bazel-handbag', 'external', 'com_google_googletest', 'googletest', 'include', ]),
+    '-I', '/'.join([REPO_DIR, 'bazel-handbag', 'external', 'com_github_google_benchmark', 'include', ]),
     '-isystem', '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../lib/c++/v1',
     '-isystem', '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include',
     '-isystem', '/usr/lib/c++/v1',
