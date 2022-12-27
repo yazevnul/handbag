@@ -28,18 +28,18 @@ namespace {
 
 struct Foo {};
 
-TEST(Singleton, Test) {
+TEST(SingletonTest, SamePtr) {
   auto* const first = &Singleton<Foo>();
   auto* const second = &Singleton<Foo>();
   EXPECT_THAT(first, Pointer(Eq(second)));
 }
 
-TEST(Singleton, POD) {
+TEST(SingletonTest, PodDefaultInit) {
   const auto value = Singleton<int>();
   EXPECT_THAT(value, Eq(0));
 }
 
-TEST(Singleton, CustomTraits) {
+TEST(SingletonTest, CustomTraits) {
   const auto value = Singleton<int, IntTagOne>();
   EXPECT_THAT(value, Eq(kIntTagOneValue));
 }
@@ -56,11 +56,17 @@ struct FirstCallToCtorThrows {
   }
 };
 
-TEST(Singleton, Retry) {
+TEST(SingletonTest, Retry) {
   EXPECT_THAT(
-      [] { (void)Singleton<FirstCallToCtorThrows>(); },
+      [] {
+        const auto& foo = Singleton<FirstCallToCtorThrows>();
+        (void)foo;
+      },
       ThrowsMessage<std::runtime_error>(Eq(FirstCallToCtorThrows::NEEDLE)));
-  EXPECT_NO_THROW({ (void)Singleton<FirstCallToCtorThrows>(); });
+  EXPECT_NO_THROW({
+    const auto& foo = Singleton<FirstCallToCtorThrows>();
+    (void)foo;
+  });
 }
 
 struct CountsCtorCalls {
@@ -71,13 +77,15 @@ struct CountsCtorCalls {
 
 std::atomic<int> CountsCtorCalls::ctor_calls = 0;
 
-TEST(Singleton, CtorCalls) {
+TEST(SingletonTest, CtorCalls) {
   EXPECT_THAT(CountsCtorCalls::ctor_calls.load(std::memory_order_acquire),
               Eq(0));
-  (void)Singleton<CountsCtorCalls>();
+  const auto& foo = Singleton<CountsCtorCalls>();
+  (void)foo;
   EXPECT_THAT(CountsCtorCalls::ctor_calls.load(std::memory_order_acquire),
               Eq(1));
-  (void)Singleton<CountsCtorCalls>();
+  const auto& bar = Singleton<CountsCtorCalls>();
+  (void)bar;
   EXPECT_THAT(CountsCtorCalls::ctor_calls.load(std::memory_order_acquire),
               Eq(1));
 }
@@ -88,16 +96,33 @@ struct ToBeAllocatedOnHeap {
   std::array<std::byte, kSize> data;
 };
 
-TEST(Singleton, OnHeap) { (void)Singleton<ToBeAllocatedOnHeap>(); }
+TEST(SingletonTest, OnHeap) { (void)Singleton<ToBeAllocatedOnHeap>(); }
 
-TEST(Singleton, Concurrency) {
+TEST(SingletonTest, Concurrency) {
   struct A {};
-  const auto task = [] { (void)Singleton<A>(); };
+  const auto task = [] {
+    const auto& foo = Singleton<A>();
+    (void)foo;
+  };
   auto job_one = std::async(std::launch::async, task);
   auto job_two = std::async(std::launch::async, task);
 
   job_one.get();
   job_two.get();
+}
+
+struct ForDifferentPriorities {};
+
+TEST(SingletonDeathTest, DeathOnDifferentPriorities) {
+  const auto& foo = Singleton<ForDifferentPriorities>();
+  (void)foo;
+  EXPECT_DEATH(([] {
+                 const auto& bar =
+                     Singleton<ForDifferentPriorities, SingletonDefaultTag,
+                               kSingletonDefaultPriority + 1>();
+                 (void)bar;
+               }()),
+               "priority");
 }
 
 }  // namespace

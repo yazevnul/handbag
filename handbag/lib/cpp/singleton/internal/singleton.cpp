@@ -86,10 +86,11 @@ class SingletonVault {
       ordered_[priority].push_back(it->second.get());
     } else {
       if (ABSL_PREDICT_FALSE(it->second->priority != priority)) {
-        std::fprintf(stderr,
-                     "FATAL: got singletons of the same type and tag, but with "
-                     "different priorities; existing=%d, new=%d",
-                     it->second->priority, priority);
+        std::fprintf(
+            stderr,
+            "FATAL: Singleton of the same type and with the same tag already "
+            "exists, but priority is different; existing=%d, requested=%d",
+            it->second->priority, priority);
         std::abort();
       }
     }

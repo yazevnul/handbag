@@ -18,7 +18,11 @@ struct SingletonInstanceTraits {
   }
 };
 
-template <typename T, typename Tag = SingletonDefaultTag, int Priority = 0>
+constexpr int kSingletonDefaultPriority = 0;
+
+/// The lower the `Priority` the earlier singleton will be destroyed.
+template <typename T, typename Tag = SingletonDefaultTag,
+          int Priority = kSingletonDefaultPriority>
 T& Singleton() {
   auto* res =
       singleton_internal::Singleton<T, Tag, Priority,
