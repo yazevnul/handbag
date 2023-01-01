@@ -2,9 +2,11 @@ cc_library(
     name = "executor",
     srcs = [
         "executor.cpp",
+        "internal/executor.cpp",
     ],
     hdrs = [
         "executor.h",
+        "internal/executor.h",
     ],
     visibility = ["//visibility:public"],
     deps = [

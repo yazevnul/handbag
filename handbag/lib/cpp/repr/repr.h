@@ -1,9 +1,9 @@
 #pragma once
 
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <sstream>
 #include <utility>
 
 namespace handbag {
@@ -16,7 +16,8 @@ struct IRepr {
 
 class Repr {
   class NotPubliclyConstructible {};
-public:
+
+ public:
   Repr(NotPubliclyConstructible /*npc*/, std::string_view name);
   Repr() = delete;
   Repr(const Repr&) = delete;
@@ -31,7 +32,7 @@ public:
 
   std::string end() &&;
 
-private:
+ private:
   bool has_fields_ = false;
   std::string repr_;
 };
@@ -39,26 +40,25 @@ private:
 /// Impl
 
 inline Repr::Repr(NotPubliclyConstructible /*npc*/, const std::string_view name)
-    : repr_(name)
-{}
+    : repr_(name) {}
 
 inline Repr Repr::create(const std::string_view name) noexcept {
-    Repr res(NotPubliclyConstructible(), name);
-    return res;
+  Repr res(NotPubliclyConstructible(), name);
+  return res;
 }
 
 template <typename T>
 inline Repr&& Repr::field(const std::string_view name, const T& value) && {
-    std::ostringstream out(std::move(repr_));
-    out << (has_fields_ ? ", " : "(") << name << "=" << value;
-    has_fields_ = true;
-    repr_ = std::move(out).str();
-    return std::move(*this);
+  std::ostringstream out(std::move(repr_));
+  out << (has_fields_ ? ", " : "(") << name << "=" << value;
+  has_fields_ = true;
+  repr_ = std::move(out).str();
+  return std::move(*this);
 }
 
 inline std::string Repr::end() && {
-    auto res = std::move(repr_);
-    return res;
+  auto res = std::move(repr_);
+  return res;
 }
 
-}
+}  // namespace handbag
