@@ -4,17 +4,16 @@
 #include <type_traits>
 
 #include "lib/cpp/singleton/internal/singleton.h"
+#include "lib/cpp/singleton/fwd.h"
 
 namespace handbag {
 
-/// @selfdocumenting
-struct SingletonDefaultTag {};
-
 template <typename T, typename Tag>
-struct SingletonInstanceTraits {
+struct SingletonTraits {
   static void Construct(void* const ptr) noexcept(
       std::is_nothrow_default_constructible_v<T>) {
-    ::new (ptr) T();
+    auto* const typed = ::new (ptr) T();
+    (void)typed;
   }
 };
 
@@ -26,7 +25,7 @@ template <typename T, typename Tag = SingletonDefaultTag,
 T& Singleton() {
   auto* res =
       singleton_internal::Singleton<T, Tag, Priority,
-                                    SingletonInstanceTraits>::getInstance();
+                                    SingletonTraits>::getInstance();
   return *res;
 }
 

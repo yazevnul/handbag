@@ -24,7 +24,7 @@ constexpr int kUninitialized = 0;
 constexpr int kInitializing = 1;
 constexpr int kInitialized = 2;
 constexpr int kDestroying = 3;
-constexpr int kDestroyed = 3;
+constexpr int kDestroyed = 4;
 
 static std::atomic<int> vault_state = kUninitialized;
 

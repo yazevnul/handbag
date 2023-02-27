@@ -16,7 +16,7 @@ constexpr int kIntTagOneValue = 20221227;
 }  // namespace
 
 template <>
-struct SingletonInstanceTraits<int, IntTagOne> {
+struct SingletonTraits<int, IntTagOne> {
   static void Construct(void* const ptr) noexcept {
     ::new (ptr) int(kIntTagOneValue);
   }
