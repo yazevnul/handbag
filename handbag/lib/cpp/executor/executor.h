@@ -12,8 +12,8 @@ namespace handbag {
 struct IExecutor {
   virtual ~IExecutor() = default;
 
-  void Add(absl::AnyInvocable<void() &&> task) noexcept;
-  bool TryAdd(absl::AnyInvocable<void() &&>&& task) noexcept;
+  virtual void Add(absl::AnyInvocable<void() &&> task) noexcept;
+  virtual bool TryAdd(absl::AnyInvocable<void() &&>&& task) noexcept;
 };
 
 template <typename Invocable, typename... Args>

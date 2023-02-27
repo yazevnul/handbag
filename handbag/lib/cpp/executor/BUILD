@@ -13,3 +13,19 @@ cc_library(
         "@com_google_absl//absl/functional:any_invocable",
     ]
 )
+
+cc_library(
+    name = "cpu",
+    srcs = [
+        "cpu.cpp",
+    ],
+    hdrs = [
+        "cpu.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//lib/cpp/repr:repr"
+        "//lib/cpp/start_stop:start_stop"
+        "@com_google_absl//absl/functional:any_invocable",
+    ]
+)

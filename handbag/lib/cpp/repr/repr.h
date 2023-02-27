@@ -11,7 +11,7 @@ namespace handbag {
 struct IRepr {
   virtual ~IRepr() = default;
 
-  virtual std::string GetRepr() = 0;
+  virtual std::string GetRepr() const noexcept = 0;
 };
 
 class Repr {
