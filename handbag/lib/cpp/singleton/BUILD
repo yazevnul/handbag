@@ -14,7 +14,10 @@ cc_library(
     deps = [
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/cleanup:cleanup",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/log:log",
         "@com_google_absl//absl/memory:memory",
+        "@com_google_absl//absl/strings:str_format",
     ]
 )
 

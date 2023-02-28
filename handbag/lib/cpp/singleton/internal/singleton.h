@@ -14,6 +14,7 @@
 
 #include "absl/base/attributes.h"
 #include "absl/cleanup/cleanup.h"
+#include "absl/log/check.h"
 
 namespace handbag::singleton_internal {
 
@@ -55,12 +56,8 @@ class DynamicStorage {
 
   void allocate() noexcept {
     wrapper_ = ::new (std::nothrow) Wrapper();
-    if (wrapper_ == nullptr) {
-      std::fprintf(
-          stderr,
-          "FATAL: Couldn't allocate memory for the singleton instance state\n");
-      std::abort();
-    }
+    CHECK(wrapper_ != nullptr)
+        << "Couldn't allocate memory for the singleton instance state.";
   }
 
   void deallocate() noexcept {

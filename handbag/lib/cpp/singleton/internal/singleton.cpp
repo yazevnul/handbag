@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <map>
 #include <mutex>
 #include <queue>
@@ -16,11 +17,14 @@
 #include "absl/base/attributes.h"
 #include "absl/base/optimization.h"
 #include "absl/cleanup/cleanup.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/strings/str_format.h"
 
 namespace handbag::singleton_internal {
 namespace {
 
-enum EState : int {
+enum class EState : int {
   Uninitialized,
   Initializing,
   Initialized,
@@ -60,14 +64,11 @@ class SingletonVault {
       entry_storage = entry.storage;
     }
 
-    if (ABSL_PREDICT_FALSE(entry_priority != priority)) {
-      std::fprintf(
-          stderr,
-          "FATAL: Singleton of the same type and with the same tag already "
-          "exists, but priority is different; existing=%d, requested=%d",
-          entry_priority, priority);
-      std::abort();
-    }
+    CHECK(entry_priority == priority)
+        << "Singleton of the same type and with the same tag already "
+           "exists, but priority is different; "
+        << absl::StrFormat("existing=%d, requested=%d", entry_priority,
+                           priority);
 
     return entry_storage;
   }
@@ -116,22 +117,16 @@ void DestroySingletonVault() {
   if (auto state = EState::Initialized; ABSL_PREDICT_FALSE(
           !vault_state.compare_exchange_strong(state, EState::Destroying))) {
     if (state == EState::Uninitialized) {
-      std::fprintf(stderr,
-                   "FATAL: Trying to destroy uninitialized singleton vault.\n");
+      LOG(FATAL) << "Trying to destroy uninitialized singleton vault.";
     } else if (state == EState::Initializing) {
-      std::fprintf(stderr,
-                   "FATAL: Trying to destroy singleton vault while it's being "
-                   "initialized.\n");
+      LOG(FATAL) << "Trying to destroy singleton vault while it's being "
+                    "initialized.";
     } else if (state != EState::Destroying) {
-      std::fprintf(stderr,
-                   "FATAL: Trying to destroy singleton vault while it's being "
-                   "destroyed.\n");
+      LOG(FATAL) << "Trying to destroy singleton vault while it's being "
+                    "destroyed.";
     } else if (state == EState::Destroyed) {
-      std::fprintf(stderr,
-                   "FATAL: Trying to destroy destroyed singleton vault.\n");
+      LOG(FATAL) << "Trying to destroy destroyed singleton vault.";
     }
-
-    std::abort();
   }
 
   const absl::Cleanup move_to_destroyed_state = []() noexcept {
@@ -146,19 +141,16 @@ void DestroySingletonVault() {
 ABSL_ATTRIBUTE_RETURNS_NONNULL SingletonVault* GetSingletonVault() noexcept {
   if (const auto state = vault_state.load(std::memory_order_acquire);
       state == EState::Initialized) {
-    return reinterpret_cast<SingletonVault*>(vault_memory.data());
+    auto* res = reinterpret_cast<SingletonVault*>(vault_memory.data());
+    return res;
   } else if (ABSL_PREDICT_FALSE(state == EState::Destroying ||
                                 state == EState::Destroyed)) {
     if (state == EState::Destroying) {
-      std::fprintf(stderr,
-                   "FATAL: Trying to access singleton vault while it's being "
-                   "destroyed.\n");
+      LOG(FATAL) << "Trying to access singleton vault while it's being "
+                    "destroyed.";
     } else if (state == EState::Destroyed) {
-      std::fprintf(stderr,
-                   "FATAL: Trying to access a destroyed singleton vault.\n");
+      LOG(FATAL) << "Trying to access a destroyed singleton vault.";
     }
-
-    std::abort();
   }
 
   if (auto state = EState::Uninitialized;
@@ -168,24 +160,20 @@ ABSL_ATTRIBUTE_RETURNS_NONNULL SingletonVault* GetSingletonVault() noexcept {
       if (state == EState::Initializing) {
         std::this_thread::yield();
       } else if (state == EState::Initialized) {
-        return reinterpret_cast<SingletonVault*>(vault_memory.data());
+        auto* res = reinterpret_cast<SingletonVault*>(vault_memory.data());
+        return res;
       } else if (ABSL_PREDICT_FALSE(state == EState::Uninitialized ||
                                     state == EState::Destroying ||
                                     state == EState::Destroyed)) {
         if (state == EState::Uninitialized) {
-          std::fprintf(stderr,
-                       "FATAL: Waiting for uninitialized singleton vault "
-                       "initialization.\n");
+          LOG(FATAL) << "Waiting for uninitialized singleton vault "
+                        "initialization.";
         } else if (state == EState::Destroying) {
-          std::fprintf(stderr,
-                       "FATAL: Trying to access singleton vault while it's "
-                       "being destroyed.\n");
+          LOG(FATAL) << "Trying to access singleton vault while it's "
+                        "being destroyed.";
         } else if (state == EState::Destroyed) {
-          std::fprintf(
-              stderr, "FATAL: Trying to access a destroyed singleton vault.\n");
+          LOG(FATAL) << "Trying to access a destroyed singleton vault.";
         }
-
-        std::abort();
       }
     }
   }
