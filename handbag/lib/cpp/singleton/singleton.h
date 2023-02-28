@@ -22,7 +22,8 @@ constexpr int kSingletonDefaultPriority = 0;
 /// The lower the `Priority` the earlier singleton will be destroyed.
 template <typename T, typename Tag = SingletonDefaultTag,
           int Priority = kSingletonDefaultPriority>
-T& Singleton() {
+T& Singleton() noexcept(
+    singleton_internal::IsNoexceptConstructible<SingletonTraits<T, Tag>>()) {
   auto* res = singleton_internal::Singleton<T, Tag, Priority,
                                             SingletonTraits>::getInstance();
   return *res;
