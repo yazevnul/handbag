@@ -6,4 +6,4 @@ struct SingletonDefaultTag;
 
 template <typename T, typename Tag>
 struct SingletonTraits;
-}
+}  // namespace handbag

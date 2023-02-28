@@ -20,89 +20,92 @@
 namespace handbag::singleton_internal {
 namespace {
 
-constexpr int kUninitialized = 0;
-constexpr int kInitializing = 1;
-constexpr int kInitialized = 2;
-constexpr int kDestroying = 3;
-constexpr int kDestroyed = 4;
-
-static std::atomic<int> vault_state = kUninitialized;
-
-struct SingletonStatePrefix {
-  void (*destroy)(void*) = nullptr;
+enum EState : int {
+  Uninitialized,
+  Initializing,
+  Initialized,
+  Destroying,
+  Destroyed
 };
+
+static std::atomic<EState> vault_state = EState::Uninitialized;
 
 class SingletonVault {
   struct Entry {
     std::mutex mutex;
     int priority = 0;
-    void* state = nullptr;
-    void* instance = nullptr;
+    void* storage = nullptr;
+    void (*destroy_fn)(void*) = nullptr;
   };
 
  public:
-  template <bool Noexcept>
+  template <bool CreateFnNoexcept>
   ABSL_ATTRIBUTE_RETURNS_NONNULL void* CreateInstance(
-      std::pair<void*, void*> (*const func)(), const std::type_index key,
-      const int priority) noexcept(Noexcept) {
-    auto* const entry = GetEntry(key, priority);
+      void* (*const create_fn)(), void (*const destroy_fn)(void*),
+      const std::type_index key,
+      const int priority) noexcept(CreateFnNoexcept) {
+    auto& entry = GetEntry(key, priority);
 
-    const std::unique_lock lock(entry->mutex);
-    if (entry->instance == nullptr) {
-      std::tie(entry->state, entry->instance) = func();
+    int entry_priority = 0;
+    void* entry_storage = nullptr;
+    {
+      const std::unique_lock lock(entry.mutex);
+      if (entry.storage == nullptr) {
+        entry.storage = create_fn();
+        entry.destroy_fn = destroy_fn;
+        entry.priority = priority;
+      }
+
+      entry_priority = entry.priority;
+      entry_storage = entry.storage;
     }
 
-    return entry->instance;
+    if (ABSL_PREDICT_FALSE(entry_priority != priority)) {
+      std::fprintf(
+          stderr,
+          "FATAL: Singleton of the same type and with the same tag already "
+          "exists, but priority is different; existing=%d, requested=%d",
+          entry_priority, priority);
+      std::abort();
+    }
+
+    return entry_storage;
   }
 
-  void DestroyInstances() {
+  void DestroyInstances() noexcept(false) {
     const std::unique_lock lock(mutex_);
     for (const auto& [priority, entries] : ordered_) {
       (void)priority;
-      for (auto* const entry : entries) {
-        const std::unique_lock entry_lock(entry->mutex);
-        if (entry->state == nullptr) {
+      for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+        auto& entry = **it;
+        const std::unique_lock entry_lock(entry.mutex);
+        if (entry.storage == nullptr) {
           continue;
         }
 
-        auto* const destroy =
-            reinterpret_cast<SingletonStatePrefix*>(entry->state)->destroy;
-        destroy(entry->state);
+        entry.destroy_fn(entry.storage);
       }
     }
 
-    entries_.clear();
     ordered_.clear();
+    entries_.clear();
   }
 
  private:
-  ABSL_ATTRIBUTE_RETURNS_NONNULL Entry* GetEntry(const std::type_index key,
-                                                 const int priority) {
+  Entry& GetEntry(const std::type_index key, const int priority) {
     const std::unique_lock lock(mutex_);
-    auto it = entries_.find(key);
-    if (it == entries_.end()) {
-      it = entries_.emplace(key, std::make_unique<Entry>()).first;
-      it->second->priority = priority;
-      ordered_[priority].push_back(it->second.get());
-    } else {
-      if (ABSL_PREDICT_FALSE(it->second->priority != priority)) {
-        std::fprintf(
-            stderr,
-            "FATAL: Singleton of the same type and with the same tag already "
-            "exists, but priority is different; existing=%d, requested=%d",
-            it->second->priority, priority);
-        std::abort();
-      }
-    }
-
-    auto* res = it->second.get();
-
+    auto& res =
+        entries_
+            .emplace(std::piecewise_construct, std::forward_as_tuple(key),
+                     std::forward_as_tuple())
+            .first->second;
+    ordered_[priority].push_back(&res);
     return res;
   }
 
  private:
   std::mutex mutex_;
-  std::map<std::type_index, std::unique_ptr<Entry>> entries_;
+  std::map<std::type_index, Entry> entries_;
   std::map<int, std::vector<Entry*>> ordered_;
 };
 
@@ -110,20 +113,20 @@ alignas(alignof(SingletonVault)) static std::array<
     std::byte, sizeof(SingletonVault)> vault_memory = {};
 
 void DestroySingletonVault() {
-  if (auto state = kInitialized; ABSL_PREDICT_FALSE(
-          !vault_state.compare_exchange_strong(state, kDestroying))) {
-    if (state == kUninitialized) {
+  if (auto state = EState::Initialized; ABSL_PREDICT_FALSE(
+          !vault_state.compare_exchange_strong(state, EState::Destroying))) {
+    if (state == EState::Uninitialized) {
       std::fprintf(stderr,
                    "FATAL: Trying to destroy uninitialized singleton vault.\n");
-    } else if (state == kInitializing) {
+    } else if (state == EState::Initializing) {
       std::fprintf(stderr,
                    "FATAL: Trying to destroy singleton vault while it's being "
                    "initialized.\n");
-    } else if (state != kDestroying) {
+    } else if (state != EState::Destroying) {
       std::fprintf(stderr,
                    "FATAL: Trying to destroy singleton vault while it's being "
                    "destroyed.\n");
-    } else if (state == kDestroyed) {
+    } else if (state == EState::Destroyed) {
       std::fprintf(stderr,
                    "FATAL: Trying to destroy destroyed singleton vault.\n");
     }
@@ -131,8 +134,8 @@ void DestroySingletonVault() {
     std::abort();
   }
 
-  const absl::Cleanup move_to_destroyed_state = [] {
-    vault_state.store(kDestroyed, std::memory_order_release);
+  const absl::Cleanup move_to_destroyed_state = []() noexcept {
+    vault_state.store(EState::Destroyed, std::memory_order_release);
   };
 
   auto* const vault = reinterpret_cast<SingletonVault*>(vault_memory.data());
@@ -142,14 +145,15 @@ void DestroySingletonVault() {
 
 ABSL_ATTRIBUTE_RETURNS_NONNULL SingletonVault* GetSingletonVault() noexcept {
   if (const auto state = vault_state.load(std::memory_order_acquire);
-      state == kInitialized) {
+      state == EState::Initialized) {
     return reinterpret_cast<SingletonVault*>(vault_memory.data());
-  } else if (ABSL_PREDICT_FALSE(state == kDestroying || state == kDestroyed)) {
-    if (state == kDestroying) {
+  } else if (ABSL_PREDICT_FALSE(state == EState::Destroying ||
+                                state == EState::Destroyed)) {
+    if (state == EState::Destroying) {
       std::fprintf(stderr,
                    "FATAL: Trying to access singleton vault while it's being "
                    "destroyed.\n");
-    } else if (state == kDestroyed) {
+    } else if (state == EState::Destroyed) {
       std::fprintf(stderr,
                    "FATAL: Trying to access a destroyed singleton vault.\n");
     }
@@ -157,26 +161,26 @@ ABSL_ATTRIBUTE_RETURNS_NONNULL SingletonVault* GetSingletonVault() noexcept {
     std::abort();
   }
 
-  if (auto state = kUninitialized;
-      !vault_state.compare_exchange_strong(state, kInitializing)) {
+  if (auto state = EState::Uninitialized;
+      !vault_state.compare_exchange_strong(state, EState::Initializing)) {
     for (;;) {
       state = vault_state.load(std::memory_order_acquire);
-      if (state == kInitializing) {
+      if (state == EState::Initializing) {
         std::this_thread::yield();
-      } else if (state == kInitialized) {
+      } else if (state == EState::Initialized) {
         return reinterpret_cast<SingletonVault*>(vault_memory.data());
-      } else if (ABSL_PREDICT_FALSE(state == kUninitialized ||
-                                    state == kDestroying ||
-                                    state == kDestroyed)) {
-        if (state == kUninitialized) {
+      } else if (ABSL_PREDICT_FALSE(state == EState::Uninitialized ||
+                                    state == EState::Destroying ||
+                                    state == EState::Destroyed)) {
+        if (state == EState::Uninitialized) {
           std::fprintf(stderr,
                        "FATAL: Waiting for uninitialized singleton vault "
                        "initialization.\n");
-        } else if (state == kDestroying) {
+        } else if (state == EState::Destroying) {
           std::fprintf(stderr,
                        "FATAL: Trying to access singleton vault while it's "
                        "being destroyed.\n");
-        } else if (state == kDestroyed) {
+        } else if (state == EState::Destroyed) {
           std::fprintf(
               stderr, "FATAL: Trying to access a destroyed singleton vault.\n");
         }
@@ -188,24 +192,27 @@ ABSL_ATTRIBUTE_RETURNS_NONNULL SingletonVault* GetSingletonVault() noexcept {
 
   auto* const res = ::new (vault_memory.data()) SingletonVault();
   std::atexit(&DestroySingletonVault);
-  vault_state.store(kInitialized);
+  vault_state.store(EState::Initialized);
 
   return res;
 }
 
 }  // namespace
 
-template <bool Noexcept>
-void* CreateInstance(std::pair<void*, void*> (*const func)(),
-                     const std::type_index key,
-                     const int priority) noexcept(Noexcept) {
-  auto res = GetSingletonVault()->CreateInstance<Noexcept>(func, key, priority);
+template <bool CreateFnNoexcept>
+void* CreateInstance(void* (*const create_fn)(),
+                     void (*const destroy_fn)(void*), const std::type_index key,
+                     const int priority) noexcept(CreateFnNoexcept) {
+  auto res = GetSingletonVault()->CreateInstance<CreateFnNoexcept>(
+      create_fn, destroy_fn, key, priority);
   return res;
 }
 
-template void* CreateInstance<false>(std::pair<void*, void*> (*func)(),
+template void* CreateInstance<false>(void* (*create_fn)(),
+                                     void (*destroy_fn)(void*),
                                      std::type_index key, int priority);
-template void* CreateInstance<true>(std::pair<void*, void*> (*func)(),
+template void* CreateInstance<true>(void* (*create_fn)(),
+                                    void (*destroy_fn)(void*),
                                     std::type_index key, int priority) noexcept;
 
 }  // namespace handbag::singleton_internal

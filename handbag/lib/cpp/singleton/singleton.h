@@ -3,8 +3,8 @@
 #include <memory>
 #include <type_traits>
 
-#include "lib/cpp/singleton/internal/singleton.h"
 #include "lib/cpp/singleton/fwd.h"
+#include "lib/cpp/singleton/internal/singleton.h"
 
 namespace handbag {
 
@@ -23,9 +23,8 @@ constexpr int kSingletonDefaultPriority = 0;
 template <typename T, typename Tag = SingletonDefaultTag,
           int Priority = kSingletonDefaultPriority>
 T& Singleton() {
-  auto* res =
-      singleton_internal::Singleton<T, Tag, Priority,
-                                    SingletonTraits>::getInstance();
+  auto* res = singleton_internal::Singleton<T, Tag, Priority,
+                                            SingletonTraits>::getInstance();
   return *res;
 }
 

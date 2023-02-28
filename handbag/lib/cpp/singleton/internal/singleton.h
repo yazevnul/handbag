@@ -26,37 +26,34 @@ struct Tag {
 };
 
 template <typename T, typename Tag>
-class StaticMemory {
+class StaticStorage {
  public:
-  ABSL_ATTRIBUTE_RETURNS_NONNULL void* get() const noexcept {
+  ABSL_ATTRIBUTE_RETURNS_NONNULL void* get() noexcept {
     void* const res = memory.data();
     return res;
   }
 
-  void init() noexcept {}
-  void destroy() noexcept {}
+  void allocate() noexcept { memory.fill(std::byte{}); }
+
+  void deallocate() noexcept { memory.fill(std::byte{}); }
 
  private:
-  alignas(alignof(T)) static std::array<std::byte, sizeof(T)> memory;
+  alignas(alignof(T)) std::array<std::byte, sizeof(T)> memory;
 };
 
 template <typename T, typename Tag>
-alignas(alignof(T))
-    std::array<std::byte, sizeof(T)> StaticMemory<T, Tag>::memory = {};
-
-template <typename T, typename Tag>
-class DynamicMemory {
+class DynamicStorage {
   struct Wrapper {
     alignas(alignof(T)) std::array<std::byte, sizeof(T)> memory = {};
   };
 
  public:
-  ABSL_ATTRIBUTE_RETURNS_NONNULL void* get() const noexcept {
+  ABSL_ATTRIBUTE_RETURNS_NONNULL void* get() noexcept {
     void* const res = wrapper_->memory.data();
     return res;
   }
 
-  void init() noexcept {
+  void allocate() noexcept {
     wrapper_ = ::new (std::nothrow) Wrapper();
     if (wrapper_ == nullptr) {
       std::fprintf(
@@ -66,10 +63,13 @@ class DynamicMemory {
     }
   }
 
-  void destroy() noexcept { ::delete wrapper_; }
+  void deallocate() noexcept {
+    wrapper_->memory.fill(std::byte{});
+    ::delete wrapper_;
+  }
 
  private:
-  Wrapper* wrapper_ = nullptr;
+  Wrapper* wrapper_;
 };
 
 constexpr bool IsSingletonDynamicallyAllocated(const size_t size) noexcept {
@@ -79,63 +79,67 @@ constexpr bool IsSingletonDynamicallyAllocated(const size_t size) noexcept {
 }
 
 template <typename T, typename Tag>
-using Memory = std::conditional_t<IsSingletonDynamicallyAllocated(sizeof(T)),
-                                  DynamicMemory<T, Tag>, StaticMemory<T, Tag>>;
+using Storage =
+    std::conditional_t<IsSingletonDynamicallyAllocated(sizeof(T)),
+                       DynamicStorage<T, Tag>, StaticStorage<T, Tag>>;
 
-template <bool Noexcept>
+template <typename Traits>
+constexpr bool IsNoexceptConstructible() noexcept {
+  auto res = noexcept(Traits::Construct(std::declval<void*>()));
+  return res;
+}
+
+template <bool CreateFnNoexcept>
 ABSL_ATTRIBUTE_RETURNS_NONNULL void* CreateInstance(
-    std::pair<void*, void*> (*func)(), std::type_index key,
-    int priority) noexcept(Noexcept);
+    void* (*create_fn)(), void (*destroy_fn)(void*), std::type_index key,
+    int priority) noexcept(CreateFnNoexcept);
 
 template <typename T, typename Tag, int Priority,
           template <typename...> typename Traits>
 class Singleton final {
   static constexpr bool kIsNothrowConstructible =
-      noexcept(Traits<T, Tag>::Construct(std::declval<void*>()));
+      IsNoexceptConstructible<Traits<T, Tag>>();
+  using Storage = singleton_internal::Storage<T, Tag>;
+  using SingletonTag = singleton_internal::Tag<T, Tag>;
 
  public:
   static ABSL_ATTRIBUTE_RETURNS_NONNULL T* getInstance() noexcept(
       kIsNothrowConstructible) {
-    static T* const instance = reinterpret_cast<T*>(
-        singleton_internal::CreateInstance<kIsNothrowConstructible>(
-            &CreateInstance, singleton_internal::Tag<T, Tag>::key(), Priority));
+    static auto* const instance = reinterpret_cast<T*>(
+        reinterpret_cast<Storage*>(
+            singleton_internal::CreateInstance<kIsNothrowConstructible>(
+                &CreateInstance, &DestroyInstance, SingletonTag::key(),
+                Priority))
+            ->get());
     return instance;
   }
 
  private:
-  struct State {
-    void (*destroy)(void*) = &DestroyInstance;
-    Memory<T,
-           singleton_internal::Tag<Tag, std::integral_constant<int, Priority>>>
-        storage;
-  };
+  static void* CreateInstance() noexcept(kIsNothrowConstructible) {
+    static_assert(std::is_trivially_constructible_v<Storage>);
+    static_assert(std::is_trivially_destructible_v<Storage>);
+    static Storage storage;
 
-  static_assert(std::is_standard_layout_v<State>);
+    storage.allocate();
 
-  static std::pair<void*, void*> CreateInstance() noexcept(
-      kIsNothrowConstructible) {
-    static State state;
-
-    state.storage.init();
-
-    const absl::Cleanup destroy_storage_on_exception = [&]() mutable {
+    const absl::Cleanup deallocate_on_exception = []() noexcept {
       if (std::uncaught_exceptions() > 0) {
-        state.storage.destroy();
+        storage.deallocate();
       }
     };
 
-    Traits<T, Tag>::Construct(state.storage.get());
+    Traits<T, Tag>::Construct(storage.get());
 
-    return {&state, state.storage.get()};
+    return &storage;
   }
 
-  static void DestroyInstance(void* const state) noexcept(
+  static void DestroyInstance(void* const untyped_storage) noexcept(
       std::is_nothrow_destructible_v<T>) ABSL_ATTRIBUTE_NONNULL(1) {
-    auto* const typed = reinterpret_cast<State*>(state);
+    auto& storage = *reinterpret_cast<Storage*>(untyped_storage);
 
-    const absl::Cleanup destroy_storage = [&] { typed->storage.destroy(); };
+    const absl::Cleanup deallocate = [&]() noexcept { storage.deallocate(); };
 
-    auto* const instance = reinterpret_cast<T*>(typed->storage.get());
+    auto* const instance = reinterpret_cast<T*>(storage.get());
     std::destroy_at(instance);
   }
 };
