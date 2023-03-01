@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ostream>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -13,6 +14,10 @@ struct IRepr {
 
   virtual std::string GetRepr() const noexcept = 0;
 };
+
+inline std::ostream& operator<<(std::ostream& out, const IRepr& repr) {
+  return out << repr.GetRepr();
+}
 
 class Repr {
   class NotPubliclyConstructible {};
